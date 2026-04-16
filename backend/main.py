@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.db.database import create_tables
 from backend.api import reviews, websocket
 
-app = FastAPI(title="Review Analytics API", version="1.0.0")
+app = FastAPI(title="Revlytics API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
