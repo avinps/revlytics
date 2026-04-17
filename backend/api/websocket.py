@@ -1,12 +1,15 @@
 import asyncio
-import json
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from backend.core.generator import generate_review
 from backend.db.database import SessionLocal
 from backend.db.models import Review
 from backend.core.config import settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["websocket"])
+executor = ThreadPoolExecutor(max_workers=2)
 
 class ConnectionManager:
     def __init__(self):
@@ -17,7 +20,8 @@ class ConnectionManager:
         self.active.append(ws)
 
     def disconnect(self, ws: WebSocket):
-        self.active.remove(ws)
+        if ws in self.active:
+            self.active.remove(ws)
 
     async def broadcast(self, data: dict):
         for ws in self.active.copy():
@@ -28,19 +32,28 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+def run_nlp(review_id: int):
+    try:
+        from backend.nlp.pipeline import process_review
+        return process_review(review_id)
+    except Exception as e:
+        logger.error(f"NLP error for review {review_id}: {e}")
+        return {}
+
 @router.websocket("/ws/reviews")
 async def review_stream(websocket: WebSocket):
     await manager.connect(websocket)
+    loop = asyncio.get_event_loop()
     try:
         while True:
             review = generate_review()
-
             db = SessionLocal()
             try:
                 db_review = Review(**review.model_dump())
                 db.add(db_review)
                 db.commit()
                 db.refresh(db_review)
+                review_id = db_review.id
 
                 payload = {
                     "id":               db_review.id,
@@ -55,6 +68,7 @@ async def review_stream(websocket: WebSocket):
             finally:
                 db.close()
 
+            loop.run_in_executor(executor, run_nlp, review_id)
             await asyncio.sleep(1 / settings.review_stream_rate)
 
     except WebSocketDisconnect:
