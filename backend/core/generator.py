@@ -109,8 +109,7 @@ def generate_review() -> ReviewCreate:
         else:
             base = random.choice(NEGATIVE_PHRASES)
 
-    extra       = fake.sentence(nb_words=random.randint(8, 20))
-    review_text = f"{base} {extra}"
+    review_text = base
 
     return ReviewCreate(
         reviewer_name=fake.name(),

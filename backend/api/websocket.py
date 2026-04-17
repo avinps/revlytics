@@ -32,13 +32,35 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-def run_nlp(review_id: int):
+def run_nlp_and_embed(review_id: int):
     try:
         from backend.nlp.pipeline import process_review
-        return process_review(review_id)
+        result = process_review(review_id)
+        if result.get("sentiment_label"):
+            from backend.rag.embeddings import embed_review
+            from backend.db.database import SessionLocal
+            from backend.db.models import Review
+            db = SessionLocal()
+            try:
+                review = db.query(Review).filter(Review.id == review_id).first()
+                if review:
+                    embed_review(
+                        review_id=review.id,
+                        text=review.review_text,
+                        metadata={
+                            "star_rating":      review.star_rating,
+                            "sentiment_label":  review.sentiment_label or "",
+                            "sentiment_score":  float(review.sentiment_score or 0),
+                            "product_name":     review.product_name,
+                            "product_category": review.product_category,
+                            "topics":           review.topics or "",
+                            "created_at":       review.created_at.isoformat(),
+                        }
+                    )
+            finally:
+                db.close()
     except Exception as e:
-        logger.error(f"NLP error for review {review_id}: {e}")
-        return {}
+        logger.error(f"NLP+embed error for review {review_id}: {e}")
 
 @router.websocket("/ws/reviews")
 async def review_stream(websocket: WebSocket):
@@ -68,7 +90,7 @@ async def review_stream(websocket: WebSocket):
             finally:
                 db.close()
 
-            loop.run_in_executor(executor, run_nlp, review_id)
+            loop.run_in_executor(executor, run_nlp_and_embed, review_id)
             await asyncio.sleep(1 / settings.review_stream_rate)
 
     except WebSocketDisconnect:

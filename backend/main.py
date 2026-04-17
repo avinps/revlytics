@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.db.database import create_tables
-from backend.api import reviews, websocket, analytics
+from backend.api import reviews, websocket, analytics, rag
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -23,11 +23,15 @@ async def on_startup():
     logger.info("Preloading NLP models...")
     from backend.nlp.sentiment import load_sentiment_model
     load_sentiment_model()
-    logger.info("Models ready")
+    from backend.rag.embeddings import get_embedding_model, get_collection
+    get_embedding_model()
+    get_collection()
+    logger.info("All models ready")
 
 app.include_router(reviews.router)
 app.include_router(websocket.router)
 app.include_router(analytics.router)
+app.include_router(rag.router)
 
 @app.get("/health")
 def health():
