@@ -1,18 +1,19 @@
 import random
+import time
 from faker import Faker
 from backend.schemas.review import ReviewCreate
 
 fake = Faker()
 
 PRODUCTS = [
-    ("EcoBrew Coffee Maker",    "Kitchen"),
-    ("ZenFit Yoga Mat",         "Sports"),
-    ("NovaSound Headphones",    "Electronics"),
-    ("LunaGlow Skincare Set",   "Beauty"),
+    ("EcoBrew Coffee Maker",         "Kitchen"),
+    ("ZenFit Yoga Mat",              "Sports"),
+    ("NovaSound Headphones",         "Electronics"),
+    ("LunaGlow Skincare Set",        "Beauty"),
     ("SwiftKey Mechanical Keyboard", "Electronics"),
-    ("AquaPure Water Bottle",   "Sports"),
-    ("CloudStep Running Shoes", "Footwear"),
-    ("BrightMind Study Lamp",   "Home"),
+    ("AquaPure Water Bottle",        "Sports"),
+    ("CloudStep Running Shoes",      "Footwear"),
+    ("BrightMind Study Lamp",        "Home"),
 ]
 
 POSITIVE_PHRASES = [
@@ -35,6 +36,10 @@ NEGATIVE_PHRASES = [
     "Shipping took forever and the product is flimsy.",
     "Nothing like the photos on the website.",
     "Had to return it immediately.",
+    "Terrible experience from start to finish.",
+    "Broke on first use. Absolute garbage.",
+    "Do not buy this. Complete waste of money.",
+    "Worst product I have ever purchased.",
 ]
 
 NEUTRAL_PHRASES = [
@@ -44,25 +49,67 @@ NEUTRAL_PHRASES = [
     "Shipping was slow but product is okay.",
     "Not bad but could be better.",
     "Some features are good, others not so much.",
-    "It's okay. Probably won't buy again.",
+    "It is okay. Probably won't buy again.",
     "Meets basic expectations.",
 ]
 
+# ── crisis mode state ─────────────────────────────────────
+_crisis_mode     = False
+_crisis_count    = 0
+_crisis_max      = 0
+_normal_count    = 0
+_normal_until    = 0
+# ─────────────────────────────────────────────────────────
+
+def _should_trigger_crisis() -> bool:
+    global _crisis_mode, _normal_until
+    if _crisis_mode:
+        return True
+    if time.time() < _normal_until:
+        return False
+    # 15% chance of triggering a crisis every review
+    return random.random() < 0.40
+
+def _update_crisis_state():
+    global _crisis_mode, _crisis_count, _crisis_max, _normal_count, _normal_until
+
+    if not _crisis_mode:
+        _crisis_mode  = True
+        _crisis_count = 0
+        _crisis_max   = random.randint(8, 20)
+        return
+
+    _crisis_count += 1
+    if _crisis_count >= _crisis_max:
+        _crisis_mode  = False
+        _crisis_count = 0
+        _normal_until = time.time() + random.randint(15, 40)
+
 def generate_review() -> ReviewCreate:
+    global _crisis_mode
+
+    in_crisis = _should_trigger_crisis()
+    if in_crisis:
+        _update_crisis_state()
+
     product_name, category = random.choice(PRODUCTS)
-    star_rating = random.choices(
-        [1, 2, 3, 4, 5],
-        weights=[10, 10, 15, 30, 35]
-    )[0]
 
-    if star_rating >= 4:
-        base = random.choice(POSITIVE_PHRASES)
-    elif star_rating == 3:
-        base = random.choice(NEUTRAL_PHRASES)
+    if in_crisis:
+        star_rating = random.choices([1, 2, 3], weights=[60, 30, 10])[0]
+        base        = random.choice(NEGATIVE_PHRASES)
     else:
-        base = random.choice(NEGATIVE_PHRASES)
+        star_rating = random.choices(
+            [1, 2, 3, 4, 5],
+            weights=[5, 8, 12, 30, 45]
+        )[0]
+        if star_rating >= 4:
+            base = random.choice(POSITIVE_PHRASES)
+        elif star_rating == 3:
+            base = random.choice(NEUTRAL_PHRASES)
+        else:
+            base = random.choice(NEGATIVE_PHRASES)
 
-    extra = fake.sentence(nb_words=random.randint(8, 20))
+    extra       = fake.sentence(nb_words=random.randint(8, 20))
     review_text = f"{base} {extra}"
 
     return ReviewCreate(

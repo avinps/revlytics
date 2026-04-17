@@ -1,6 +1,7 @@
 import logging
 from backend.nlp.sentiment import analyze_sentiment
 from backend.nlp.aspects import extract_aspects, aspects_to_string
+from backend.nlp.anomaly import detector
 from backend.db.models import Review
 from backend.db.database import SessionLocal
 
@@ -23,6 +24,15 @@ def process_review(review_id: int) -> dict:
 
         db.commit()
 
+        alert = detector.add_review(
+            review_id=review_id,
+            label=sentiment["label"],
+            score=sentiment["score"],
+        )
+
+        if alert:
+            logger.warning(f"ALERT triggered by review {review_id}: {alert['message']}")
+
         logger.info(
             f"Review {review_id} processed — "
             f"{sentiment['label']} ({sentiment['score']}) | "
@@ -34,6 +44,7 @@ def process_review(review_id: int) -> dict:
             "sentiment_label": review.sentiment_label,
             "sentiment_score": review.sentiment_score,
             "topics":          review.topics,
+            "alert":           alert,
         }
 
     except Exception as e:
